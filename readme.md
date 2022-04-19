@@ -129,3 +129,31 @@ graph TD;
 ### 软件流程图
 
 ![image-20220329003137619](readme_img/image-20220329003137619.png)
+
+## 开发环境搭建
+
+//安装kernel-headers(或许也不用)
+
+makefile:
+
+```makefile
+NAME = simple_filrewall  
+
+KERNEL_PATH :=/usr/src/kernels/$(shell uname -r)
+CURRENT_PATH := $(shell pwd)
+obj-m := $(NAME).o
+$(NAME)-objs := xxx.o ...
+
+.PHONY: all clean load unload
+all:
+	make -C $(KERNEL_PATH) M=$(CURRENT_PATH) modules
+load:
+	insmod $(NAME).ko
+unload:
+	rmmod $(NAME)
+clean:
+	make -C $(KERNEL_PATH) M=$(CURRENT_PATH) clean
+```
+
+
+
