@@ -1,4 +1,4 @@
-NAME = simple_filrewall  
+NAME = simple_firewall
 
 KERNEL_PATH :=/usr/src/kernels/$(shell uname -r)
 CURRENT_PATH := $(shell pwd)
