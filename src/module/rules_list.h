@@ -4,8 +4,6 @@
 #define MOD_NAME "personal_firewall"
 
 // structs
-#define RULE_BANIP 0x00
-#define RULE_BANPORT 0x01
 
 struct Rule {
 	unsigned char rule_type;

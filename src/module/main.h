@@ -7,4 +7,6 @@
 #define FIREWALL_RULE_REMOVE_IP     3
 #define FIREWALL_RULE_REMOVE_PORT   4
 
+#define RULE_BANIP 0x00
+#define RULE_BANPORT 0x01
 #endif

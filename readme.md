@@ -155,5 +155,6 @@ clean:
 	make -C $(KERNEL_PATH) M=$(CURRENT_PATH) clean
 ```
 
+## 其他
 
-
+[readme](./src/readme.md)
