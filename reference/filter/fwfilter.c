@@ -1,189 +1,196 @@
-#include "main.h"
-#include "rules_list.h"
-
 #include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/skbuff.h>
+#include <net/tcp.h>
+#include <linux/netdevice.h>
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
-#include <linux/proc_fs.h>
-#include <linux/stddef.h>
-#include <linux/tcp.h>
-// #include <net/bonding.h>
+#include "fwfilter.h"
 
-MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("A simple personal firewall");
+//和数据包处理有关钩子 
+static struct nf_hook_ops nfhoLocalIn;
+static struct nf_hook_ops nfhoLocalOut;
+static struct nf_hook_ops nfhoPreRouting;
+static struct nf_hook_ops nfhoForwarding;
+static struct nf_hook_ops nfhoPostRouting;
 
-// gloable
-struct List list_head;
-// netfilter hook
-struct nf_hook_ops nfho_local_in;
-// proc
-struct proc_dir_entry *proc_file;
-struct file_operations fopt;
+//处理应用通信钩子 
+static struct nf_sockopt_ops nfhoSockopt;
 
-// hook
-unsigned hookLocalIn(void *priv, struct sk_buff *skb,
-					 const struct nf_hook_state *state) {
-	struct iphdr *iph;
+ban_status rules, recv;
+ 
+unsigned int hookLocalIn(void* priv, struct sk_buff* skb, const struct nf_hook_state* state)
+{
+	struct iphdr *iph = ip_hdr(skb);
 	struct tcphdr *tcph = NULL;
 	struct udphdr *udph = NULL;
-	struct List *p;
-
-	unsigned long int ip;
-	unsigned short port;
-	iph = ip_hdr(skb);
-	ip = iph->saddr;
-	switch (iph->protocol) { //选择协议类型
-	case IPPROTO_TCP:
-		tcph = tcp_hdr(skb); //获得tcp头
-		port = tcph->dest;
-	case IPPROTO_UDP:
-		udph = udp_hdr(skb); //获得udp头
-		port = udph->dest;
-		break;
-	default:
-		break;
+	unsigned short port = ntohs(rules.ban_port);
+	
+	//ban ping
+	//如果数据包是icmp并且rules.ping_status为1则丢弃数据包 
+	if(iph->protocol == IPPROTO_ICMP && rules.ping_status == 1){
+		return NF_DROP;
 	}
-	p = list_head.next;
-	while (p != NULL) {
-		switch (p->rule.rule_type) {
-		case RULE_BANIP:
-			if (p->rule.data == ip)
-				return NF_DROP;
-			break;
-		case RULE_BANPORT:
-			if (p->rule.data == port)
-				return NF_DROP;
-			break;
-		default:
-			break;
+	
+	//ban port
+	//rules.port_status为1并且源端口符合，丢弃该端口udp或tcp的数据包 
+	if(rules.port_status == 1){
+		switch(iph->protocol){          //选择协议类型 
+			case IPPROTO_TCP:
+				tcph = tcp_hdr(skb);    //获得tcp头 
+				if(tcph->dest == port){
+					return NF_DROP;
+					break;
+				}
+			case IPPROTO_UDP:
+				udph = udp_hdr(skb);    //获得udp头 
+				if(udph->dest == port){
+					return NF_DROP;
+					break;
+				}
 		}
-		p = p->next;
 	}
 
+	//ban ip
+	//rules.ip_status为1并且源ip地址符合，丢弃该源ip发送的数据包 
+	if (rules.ip_status == 1){
+		if (rules.ban_ip == iph->saddr){  
+			return NF_DROP;
+		}
+	}
+	//以上情况都不符合接收数据包 
 	return NF_ACCEPT;
 }
-void hook_init(void) {
-	// set hook
-	nfho_local_in.hook = hookLocalIn;
-	nfho_local_in.pf = PF_INET;
-	nfho_local_in.priority = NF_IP_PRI_FIRST;
-	nf_register_net_hook(&init_net, &nfho_local_in);
+//其他函数接收数据包并打印信息 
+unsigned int hookLocalOut(void* priv, struct sk_buff* skb, const struct nf_hook_state* state)
+{
+	printk("hookLocalOut");
+	return NF_ACCEPT;
 }
-void hook_exit(void) {
-	// remove hook
-	nf_unregister_net_hook(&init_net, &nfho_local_in);
+unsigned int hookPreRouting(void* priv, struct sk_buff* skb, const struct nf_hook_state* state)
+{
+	printk("hookPreRouting");
+	return NF_ACCEPT;
 }
-// proc
-static ssize_t proc_write(struct file *file, const char __user *ubuf,
-						  size_t count, loff_t *ppos) {
-	const int BUFSIZE = 10240;
-	int c;
-	int num;
-	long unsigned int i1, i2;
-	struct List *p;
-	struct Rule rule;
-	char buf[BUFSIZE];
-	buf[BUFSIZE - 1] = 0;
-	if (*ppos > 0 || count > BUFSIZE)
-		return -EFAULT;
-	if (copy_from_user(buf, ubuf, count))
-		return -EFAULT;
+unsigned int hookPostRouting(void* priv, struct sk_buff* skb, const struct nf_hook_state* state)
+{
+	printk("hookPostRouting");
+	return NF_ACCEPT;
+}
+unsigned int hookForwarding(void* priv, struct sk_buff* skb, const struct nf_hook_state* state)
+{
+	printk("hookForwarding");
+	return NF_ACCEPT;
+}
 
-	p = &list_head;
-	c = strlen(buf);
-	num = sscanf(buf, "%lu %lu", &i1, &i2);
-	if (num == 2) {
-		switch (i1) {
-		case FIREWALL_RULE_CLEAR:
-			clearList(&list_head);
+int hookSockoptSet(struct sock* sock, int cmd, void __user* user, unsigned int len)
+{
+	int ret;
+	printk("hookSockoptSet");
+	//从用户空间复制数据 
+	ret = copy_from_user(&recv, user, sizeof(recv));
+	//命令类型 
+	switch(cmd){
+		case BANPING:  //禁止ping 
+			rules.ping_status = recv.ping_status;
 			break;
-		case FIREWALL_RULE_ADD_IP:
-			rule.rule_type = RULE_BANIP;
-			rule.data = (unsigned long int)i2;
-			addList(&list_head, rule);
+		case BANIP:    //禁止ip 
+			rules.ip_status = recv.ip_status;
+			rules.ban_ip = recv.ban_ip;
 			break;
-		case FIREWALL_RULE_ADD_PORT:
-			rule.rule_type = RULE_BANPORT;
-			rule.data = (unsigned short int)i2;
-			addList(&list_head, rule);
-			break;
-		case FIREWALL_RULE_REMOVE_IP:
-			rule.rule_type = RULE_BANIP;
-			rule.data = (unsigned long int)i2;
-			removeList(&list_head, rule);
-			break;
-		case FIREWALL_RULE_REMOVE_PORT:
-			rule.rule_type = RULE_BANPORT;
-			rule.data = (unsigned short int)i2;
-			removeList(&list_head, rule);
+		case BANPORT:  //禁止端口 
+			rules.port_status = recv.port_status;
+			rules.ban_port = recv.ban_port;
 			break;
 		default:
 			break;
-		}
 	}
-	*ppos = c;
-	return c;
-}
-static ssize_t proc_read(struct file *file, char __user *ubuf, size_t count,
-						 loff_t *ppos) {
-	const int BUFSIZE = 10240;
-	struct List *p;
-	char buf[BUFSIZE];
-	int len = 0, t;
-	if (*ppos > 0 || count < BUFSIZE)
-		return 0;
-
-	p = list_head.next;
-	while (p != NULL) {
-		t = len;
-		len += sprintf(buf + t, "%u %lu\n", (unsigned int)p->rule.rule_type,
-					   p->rule.data);
-		pr_info("personal_firewall: %s. %d\n", buf, len);
-		if (len >= BUFSIZE - 16)
-			break;
-		p = p->next;
+	if (ret != 0)
+	{
+		ret = -EINVAL;
+		printk("copy_from_user error");
 	}
 
-	if (copy_to_user(ubuf, buf, len))
-		return -EFAULT;
-	*ppos = len;
-	return len;
+	return ret;
 }
-void proc_init(void) {
-	// make file
-	fopt.owner = THIS_MODULE;
-	fopt.read = proc_read;
-	fopt.write = proc_write;
-	proc_file = proc_create(MOD_NAME, 0644, NULL, &fopt);
-}
-void proc_exit(void) {
-	// remove file
-	remove_proc_entry(MOD_NAME, NULL);
-}
-// main
-static __init int personalFirewallInit(void) {
-	struct Rule rule = {.rule_type = RULE_BANPORT, .data = 4000};
-	pr_info("personal_firewall install\n");
-	// hook
-	hook_init();
-	// proc
-	proc_init();
-	// inititial list
-	list_head.next = NULL;
 
-	addList(&list_head, rule);
+int hookSockoptGet(struct sock* sock, int cmd, void __user* user, int* len)
+{
+	int ret;
+	
+	printk("hookSockoptGet");
+	//将数据从内核复制到用户空间 
+	ret = copy_to_user(user, &rules, sizeof(rules));
+	if (ret != 0)
+	{
+		ret = -EINVAL;
+		printk("copy_to_user error");
+	}
+
+	return ret;
+}
+//初始化模块 
+int init_module()
+{
+	rules.ping_status = 0;   //初始化ping状态，设置为0不封禁 
+	rules.ip_status = 0;     //初始化ip状态，设置为0不封禁 
+	rules.port_status = 0;   //初始化端口状态，设置为0不封禁 
+
+	nfhoLocalIn.hook = hookLocalIn;         
+	nfhoLocalIn.pf = PF_INET;
+	nfhoLocalIn.priority = NF_IP_PRI_FIRST;
+	nf_register_net_hook(&init_net, &nfhoLocalIn);
+
+	nfhoLocalOut.hook = hookLocalOut;
+	nfhoLocalOut.pf = PF_INET;
+	nfhoLocalOut.priority = NF_IP_PRI_FIRST;
+	nf_register_net_hook(&init_net, &nfhoLocalOut);
+
+	nfhoPreRouting.hook = hookPreRouting;
+	nfhoPreRouting.pf = PF_INET;
+	nfhoPreRouting.priority = NF_IP_PRI_FIRST;
+	nf_register_net_hook(&init_net, &nfhoPreRouting);
+
+	nfhoForwarding.hook = hookForwarding;
+	nfhoForwarding.pf = PF_INET;
+	nfhoForwarding.priority = NF_IP_PRI_FIRST;
+	nf_register_net_hook(&init_net, &nfhoForwarding);
+
+	nfhoPostRouting.hook = hookPostRouting;
+	nfhoPostRouting.pf = PF_INET;
+	nfhoPostRouting.priority = NF_IP_PRI_FIRST;
+	nf_register_net_hook(&init_net, &nfhoPostRouting);
+
+	nfhoSockopt.pf = PF_INET;
+	nfhoSockopt.set_optmin = SOE_MIN;  //指定最小值 
+	nfhoSockopt.set_optmax = SOE_MAX;  //指定最大值 
+	nfhoSockopt.set = hookSockoptSet;
+	nfhoSockopt.get_optmin = SOE_MIN;
+	nfhoSockopt.get_optmax = SOE_MAX;
+	nfhoSockopt.get = hookSockoptGet;
+
+	nf_register_sockopt(&nfhoSockopt);
+
+	printk("My nf register\n");
+
 	return 0;
 }
-module_init(personalFirewallInit);
 
-static __exit void personalFirewallExit(void) {
-	pr_info("personal_filrewall remove\n");
-	// hook
-	hook_exit();
-	// proc
-	proc_exit();
-	// clear list
-	clearList(&list_head);
-	return;
+//清理模块 
+void cleanup_module()
+{
+	//注销钩子 
+	nf_unregister_net_hook(&init_net, &nfhoLocalIn);
+	nf_unregister_net_hook(&init_net, &nfhoLocalOut);
+	nf_unregister_net_hook(&init_net, &nfhoPreRouting);
+	nf_unregister_net_hook(&init_net, &nfhoForwarding);
+	nf_unregister_net_hook(&init_net, &nfhoPostRouting);
+	//注销扩展套接字 
+	nf_unregister_sockopt(&nfhoSockopt);
+
+	printk("My nf unregister\n");
 }
-module_exit(personalFirewallExit);
+
+MODULE_LICENSE("GPL");
+
+
