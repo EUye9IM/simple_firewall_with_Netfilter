@@ -7,16 +7,17 @@
 #define RULE_BANIP 0x00
 #define RULE_BANPORT 0x01
 
-struct Rule{
+struct Rule {
 	unsigned char rule_type;
 	unsigned long int data;
 };
 
-struct List{
+struct List {
 	struct Rule rule;
 	struct List *next;
 };
 
-void clearList(struct List list_head);
-void addList(struct List *list_head,struct Rule rule);
+void clearList(struct List *list_head);
+void addList(struct List *list_head, struct Rule rule);
+void removeList(struct List *list_head, struct Rule rule);
 #endif
