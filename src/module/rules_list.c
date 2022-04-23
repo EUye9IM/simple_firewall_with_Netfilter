@@ -17,6 +17,7 @@ void clearList(struct List *list_head) {
 }
 void addList(struct List *list_head, struct Rule rule) {
 	struct List *p, *new;
+	removeList(list_head, rule);
 	p = list_head->next;
 	if (list_head == NULL)
 		return;
