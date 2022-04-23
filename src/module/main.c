@@ -8,6 +8,7 @@
 #include <linux/proc_fs.h>
 #include <linux/stddef.h>
 #include <linux/tcp.h>
+#include <linux/types.h>
 #include <linux/udp.h>
 // #include <net/bonding.h>
 
@@ -30,7 +31,7 @@ unsigned hookLocalIn(void *priv, struct sk_buff *skb,
 	struct udphdr *udph = NULL;
 	struct List *p;
 
-	unsigned long int ip;
+	u32 ip;
 	unsigned short port;
 	iph = ip_hdr(skb);
 	ip = iph->saddr;
@@ -50,13 +51,16 @@ unsigned hookLocalIn(void *priv, struct sk_buff *skb,
 	while (p != NULL) {
 		switch (p->rule.rule_type) {
 		case RULE_BANIP:
-			if (p->rule.data == ip)
+			if (p->rule.data0 == ip)
 				return NF_DROP;
 			break;
 		case RULE_BANPORT:
-			if (p->rule.data == port)
+			if (p->rule.data0 == port)
 				return NF_DROP;
 			break;
+		case RULE_BANSUBNET:
+			if ((p->rule.data0 & p->rule.data1) == (ip & p->rule.data1))
+				return NF_DROP;
 		default:
 			break;
 		}
@@ -82,7 +86,7 @@ static ssize_t proc_write(struct file *file, const char __user *ubuf,
 	const int BUFSIZE = 10240;
 	int c;
 	int num;
-	long unsigned int i1, i2;
+	u32 i1, i2, i3;
 	struct List *p;
 	struct Rule rule;
 	char buf[BUFSIZE];
@@ -94,32 +98,59 @@ static ssize_t proc_write(struct file *file, const char __user *ubuf,
 
 	p = &list_head;
 	c = strlen(buf);
-	num = sscanf(buf, "%lu %lu", &i1, &i2);
-	if (num == 2) {
+	num = sscanf(buf, "%u %u %u", &i1, &i2, &i3);
+	if (num >= 1) {
 		switch (i1) {
 		case FIREWALL_RULE_CLEAR:
 			clearList(&list_head);
 			break;
 		case FIREWALL_RULE_ADD_IP:
-			rule.rule_type = RULE_BANIP;
-			rule.data = (unsigned long int)i2;
-			addList(&list_head, rule);
+			if (num >= 2) {
+				rule.rule_type = RULE_BANIP;
+				rule.data0 = i2;
+				rule.data1 = 0;
+				addList(&list_head, rule);
+			}
 			break;
 		case FIREWALL_RULE_ADD_PORT:
-			rule.rule_type = RULE_BANPORT;
-			rule.data = (unsigned short int)i2;
-			addList(&list_head, rule);
+			if (num >= 2) {
+				rule.rule_type = RULE_BANPORT;
+				rule.data0 = i2;
+				rule.data1 = 0;
+				addList(&list_head, rule);
+			}
 			break;
 		case FIREWALL_RULE_REMOVE_IP:
-			rule.rule_type = RULE_BANIP;
-			rule.data = (unsigned long int)i2;
-			removeList(&list_head, rule);
+			if (num >= 2) {
+				rule.rule_type = RULE_BANIP;
+				rule.data0 = i2;
+				rule.data1 = 0;
+				removeList(&list_head, rule);
+			}
 			break;
 		case FIREWALL_RULE_REMOVE_PORT:
-			rule.rule_type = RULE_BANPORT;
-			rule.data = (unsigned short int)i2;
-			removeList(&list_head, rule);
+			if (num >= 2) {
+				rule.rule_type = RULE_BANPORT;
+				rule.data0 = i2;
+				rule.data1 = 0;
+				removeList(&list_head, rule);
+			}
 			break;
+		case FIREWALL_RULE_ADD_SUBNET:
+			if (num >= 3) {
+				rule.rule_type = RULE_BANSUBNET;
+				rule.data0 = i2;
+				rule.data1 = i3;
+				addList(&list_head, rule);
+			}
+			break;
+		case FIREWALL_RULE_REMOVE_SUBNET:
+			if (num >= 3) {
+				rule.rule_type = RULE_BANSUBNET;
+				rule.data0 = i2;
+				rule.data1 = i3;
+				removeList(&list_head, rule);
+			}
 		default:
 			break;
 		}
@@ -139,8 +170,8 @@ static ssize_t proc_read(struct file *file, char __user *ubuf, size_t count,
 	p = list_head.next;
 	while (p != NULL) {
 		t = len;
-		len += sprintf(buf + t, "%u %lu\n", (unsigned int)p->rule.rule_type,
-					   p->rule.data);
+		len += sprintf(buf + t, "%u %u %u\n", (unsigned int)p->rule.rule_type,
+					   p->rule.data0, p->rule.data1);
 		if (len >= BUFSIZE - 16)
 			break;
 		p = p->next;
