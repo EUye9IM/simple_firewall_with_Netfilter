@@ -1,12 +1,7 @@
 #include <arpa/inet.h>
-#include <bits/types/FILE.h>
-#include <errno.h>
 #include <netdb.h>
-#include <netinet/in.h>
-#include <stdio.h>
 #include <sys/types.h>
 #include <unistd.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
