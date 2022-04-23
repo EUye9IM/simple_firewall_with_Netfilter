@@ -5,7 +5,7 @@ CURRENT_PATH := $(shell pwd)
 obj-m := $(NAME).o
 $(NAME)-objs := main.o rules_list.o
 
-.PHONY: all clean load unload
+.PHONY: all clean install remove
 all:
 	make -C $(KERNEL_PATH) M=$(CURRENT_PATH) modules
 install:
