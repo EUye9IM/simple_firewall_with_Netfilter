@@ -107,15 +107,15 @@ int main(int argc, char** argv) {
     std::vector<ushort> blocked_port;
 
     int type;
-    uint32_t data;
-    while (sin >> type >> data) { // 现在一行三个正整数了 记得改，或者按行读
+    uint32_t data0, data1;// 现在一行三个正整数了
+    while (sin >> type >> data0 >> data1) { 
       switch (type) {
         case 0:
           blocked_ip.push_back(
-              std::string(inet_ntoa(*reinterpret_cast<in_addr*>(&data))));
+              std::string(inet_ntoa(*reinterpret_cast<in_addr*>(&data0))));
           break;
         case 1:
-          blocked_port.push_back(static_cast<ushort>(data));
+          blocked_port.push_back(static_cast<ushort>(data0));
           break;
         default:
           std::cout << "Warning: 读取到不支持的协议类型" << std::ios::hex
