@@ -108,7 +108,7 @@ int main(int argc, char** argv) {
 
     int type;
     uint32_t data;
-    while (sin >> type >> data) {
+    while (sin >> type >> data) { // 现在一行三个正整数了 记得改，或者按行读
       switch (type) {
         case 0:
           blocked_ip.push_back(
@@ -131,7 +131,7 @@ int main(int argc, char** argv) {
 
     std::cout << "\t禁止访问的端口:\n";
     for (auto& port : blocked_port) {
-      std::cout << "\t\t" << port << "\n";
+      std::cout << "\t\t" << ntohs(port) << "\n";
     }
   } else if (argv[1] == "clear"s) {
     write_rule(0, 0);
