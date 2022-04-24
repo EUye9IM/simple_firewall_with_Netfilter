@@ -1,13 +1,14 @@
 #ifndef PERSONAL_FIREWALL_RULES_LIST
 #define PERSONAL_FIREWALL_RULES_LIST
 
+#include <linux/types.h>
 #define MOD_NAME "personal_firewall"
-
 // structs
 
 struct Rule {
 	unsigned char rule_type;
-	unsigned long int data;
+	u32 data0;
+	u32 data1;
 };
 
 struct List {
