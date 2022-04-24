@@ -124,37 +124,106 @@ graph TD;
   规则记录模块-->包过滤模块-->钩子安装模块
 ```
 
-
-
 ### 软件流程图
 
 ![image-20220329003137619](readme_img/image-20220329003137619.png)
 
 ## 开发环境搭建
 
-//安装kernel-headers(或许也不用)
+安装 Rocky8 并安装所需软件包
 
-makefile:
-
-```makefile
-NAME = simple_filrewall  
-
-KERNEL_PATH :=/usr/src/kernels/$(shell uname -r)
-CURRENT_PATH := $(shell pwd)
-obj-m := $(NAME).o
-$(NAME)-objs := xxx.o ...
-
-.PHONY: all clean load unload
-all:
-	make -C $(KERNEL_PATH) M=$(CURRENT_PATH) modules
-load:
-	insmod $(NAME).ko
-unload:
-	rmmod $(NAME)
-clean:
-	make -C $(KERNEL_PATH) M=$(CURRENT_PATH) clean
+```bash
+dnf install kernel-headers-`uname -r` kernel-devel-`uname -r` gcc-c++ make elfutils-libelf-devel
 ```
 
-## 其他
+## 软件编译与安装
 
-[readme](./src/readme.md)
+```bash
+make
+make install
+```
+
+## 软件卸载
+
+```bash
+make remove
+```
+
+## 软件用法说明
+
+该防火墙主要提供三个功能——ip封禁、端口封禁、子网封禁。
+
+### 命令行接口 pfw_cli 使用说明
+
+pfw_cli 即 Personal Firewall CLI —— 简易个人防火墙规则管理命令行接口
+
+```
+usage: pfw_cli <command> <args><command>:
+        list    列出当前所有规则
+        clear   清除所有规则
+        block-ip [ip地址列表]   增加规则：拦截目的地址在列表中的所有包
+        block-port [端口列表]   增加规则：拦截目的端口在列表中的所有包
+        block-subnet [子网列表] 增加规则：禁止访问列表中的子网（子网格式形如<ip地址>/<网络号>，如192.168.1.0/24）
+        allow-ip [ip地址列表]   移除规则：不再拦截目的地址在列表中的包
+        allow-port [端口列表]   移除规则：不再拦截目的端口在列表中的包
+        allow-subnet [子网列表] 移除规则：不再禁止访问列表中的子网（子网格式形如<ip地址>/<网络号>，如192.168.1.0/24）
+```
+
+### 内核模块 API 说明
+
+所有交互都以读写 `/proc/personal_firewall` 文件的形式进行。
+
+
+#### 读取目前规则
+
+参考 src/module/main.h
+
+```c
+#define RULE_BANIP     0x00
+#define RULE_BANPORT   0x01
+#define RULE_BANSUBNET 0x02
+```
+
+读取 /proc/personal_firewall
+
+一行三个正整数。
+
+第一个整数表示规则说明
+
+例：
+
+`1 8270`
+
+表示该机封禁了 20000 号端口
+
+#### 修改规则
+
+参考 src/module/main.h
+
+```c
+#define FIREWALL_RULE_CLEAR         0
+#define FIREWALL_RULE_ADD_IP        1
+#define FIREWALL_RULE_ADD_PORT      2
+#define FIREWALL_RULE_REMOVE_IP     3
+#define FIREWALL_RULE_REMOVE_PORT   4
+#define FIREWALL_RULE_ADD_SUBNET    5
+#define FIREWALL_RULE_REMOVE_SUBNET 6
+```
+
+写入 /proc/personal_firewall
+
+写入形式为，若干个正整数，中间以空格分隔
+
+第一个正整数表示功能，第二第三个为参数。
+
+- FIREWALL_RULE_CLEAR 清除所有规则
+- FIREWALL_RULE_ADD_IP 添加封禁ip，第二个值为ip（32位无符号整数）
+- FIREWALL_RULE_ADD_PORT 添加封禁ip，第二个值为port （16位无符号整数）
+- FIREWALL_RULE_REMOVE_IP 移除封禁ip，第二个值为ip
+- FIREWALL_RULE_REMOVE_PORT 移除封禁ip，第二个值为port
+- FIREWALL_RULE_ADD_SUBNET 添加封禁子网，第二个整数为ip，第三个整数为mask
+- FIREWALL_RULE_REMOVE_SUBNET 移除封禁子网，第二个整数为ip，第三个整数为mask
+
+例如想要封禁端口 20000， 可以通过命令 `echo "2 8270" > /proc/personal_firewall`
+
+此时输入 `cat /proc/personal_firewall`，因该能看到“1 8270 0”
