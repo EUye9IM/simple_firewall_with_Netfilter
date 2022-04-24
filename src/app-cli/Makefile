@@ -1,4 +1,5 @@
 CXX = g++
+LDFLAGS = -lresolv
 
 TARGET = pfw_cli
 
@@ -10,7 +11,7 @@ clean:
 	rm -f $(TARGET)
 
 install: $(TARGET)
-	cp -f $(TARGET) /usr/local/sbin
+	cp -f $(TARGET) /usr/local/bin
 
 remove:
-	rm -f /usr/local/sbin/$(TARGET)
+	rm -f /usr/local/bin/$(TARGET)
